@@ -25,7 +25,8 @@ jobs:
     
     - name: Build APK
       run: |
-        flet build apk . --yes  # 自动确认所有提示
+        # --yes 自动确认，--module-name 指定入口文件
+        flet build apk . --yes --module-name main
     
     - name: Upload APK
       uses: actions/upload-artifact@v4
