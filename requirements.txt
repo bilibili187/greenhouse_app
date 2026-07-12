@@ -2,9 +2,3 @@ flet
 requests
 pandas
 numpy
-scikit-learn-android
-scipy
-matplotlib
-tqdm
-flask
-flask-cors
