@@ -2,7 +2,7 @@ flet
 requests
 pandas
 numpy
-scikit-learn
+scikit-learn-android
 scipy
 matplotlib
 tqdm
