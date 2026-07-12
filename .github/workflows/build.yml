@@ -27,8 +27,8 @@ jobs:
       run: |
         flet build apk .
     
-    - name: Upload APK
-      uses: actions/upload-artifact@v3
+    - name: Upload APK  # <--- 只修改这里，从 v3 改为 v4
+      uses: actions/upload-artifact@v4
       with:
         name: greenhouse-app
         path: build/apk/*.apk
