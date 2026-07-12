@@ -1,0 +1,10 @@
+flet
+requests
+pandas
+numpy
+scikit-learn
+scipy
+matplotlib
+tqdm
+flask
+flask-cors
