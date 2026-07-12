@@ -406,13 +406,14 @@ class GreenhouseApp:
 
 
 # ========== 启动APP ==========
-def main():
+def main(page: ft.Page):
+    """启动APP - 接收page参数"""
     app = GreenhouseApp()
-    ft.app(target=app.main)
-
+    app.main(page)
 
 if __name__ == "__main__":
-    main()
+    # 打包后以桌面模式运行（不显示浏览器）
+    ft.app(target=main)
 
 # # ========== 启动APP ==========
 # def main(page: ft.Page):
