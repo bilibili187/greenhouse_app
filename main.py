@@ -4,12 +4,16 @@ import requests
 import json
 from datetime import datetime
 import threading
+import ssl
 
 # ========== API配置 ==========
-#API_BASE_URL = "http://127.0.0.1:5000/api"  # 本地测试
+# 注意：使用 HTTP，不是 HTTPS
+API_BASE_URL = "http://192.168.1.12:5000/api"  # 改成你电脑的实际IP
 
+# 如果遇到 SSL 错误，可以取消注释下面的代码禁用SSL验证
+# import urllib3
+# urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-API_BASE_URL = "https://10.195.54.81:5000/api"  # 部署后使用
 
 class GreenhouseApp:
     def __init__(self):
@@ -100,7 +104,6 @@ class GreenhouseApp:
         self.result_value = ft.Text("--", size=48, weight=ft.FontWeight.BOLD, color=ft.Colors.AMBER_700)
         self.result_note = ft.Text("", size=12, color=ft.Colors.GREY_500)
 
-        # 修复：移除 color 参数，用 Container 的背景色替代
         self.result_card = ft.Card(
             content=ft.Container(
                 content=ft.Column([
@@ -114,7 +117,7 @@ class GreenhouseApp:
                 ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=5),
                 padding=20,
                 width=400,
-                bgcolor=ft.Colors.AMBER_50,  # 背景色放在 Container 上
+                bgcolor=ft.Colors.AMBER_50,
             ),
             elevation=5,
         )
@@ -141,6 +144,19 @@ class GreenhouseApp:
                 padding=20,
             ),
             on_click=self.get_prediction,
+            width=180,
+        )
+
+        # ===== 新增：从云平台获取数据按钮 =====
+        self.btn_fetch_cloud = ft.ElevatedButton(
+            "☁️ 获取云数据",
+            icon=ft.Icons.CLOUD_DOWNLOAD,
+            style=ft.ButtonStyle(
+                bgcolor=ft.Colors.PURPLE_600,
+                color=ft.Colors.WHITE,
+                padding=20,
+            ),
+            on_click=self.fetch_from_cloud,
             width=180,
         )
 
@@ -190,8 +206,9 @@ class GreenhouseApp:
                 spacing=20,
             ),
             ft.Row(
-                [self.btn_upload],
+                [self.btn_fetch_cloud, self.btn_upload],
                 alignment=ft.MainAxisAlignment.CENTER,
+                spacing=20,
             ),
             ft.Divider(height=5),
             self.progress_bar,
@@ -294,8 +311,8 @@ class GreenhouseApp:
             try:
                 response = requests.post(
                     f"{API_BASE_URL}/train",
-                    json={'episodes': 300},
-                    timeout=5
+                    json={'episodes': 300, 'use_cloud': True},
+                    timeout=10
                 )
                 if response.status_code == 200:
                     self.add_log("✅ 训练启动成功")
@@ -351,7 +368,7 @@ class GreenhouseApp:
                     'hum': self.sensor_data.get('hum', 60),
                     'light': self.sensor_data.get('light', 200),
                 },
-                timeout=5
+                timeout=10
             )
 
             if response.status_code == 200:
@@ -365,12 +382,66 @@ class GreenhouseApp:
                 else:
                     self.result_note.value = "⚠️ 基于启发式规则（未训练）"
 
+                # 同时更新传感器数据（如果从云平台获取的）
+                if data.get('data_source') == '云平台':
+                    self.sensor_data = {
+                        'co2': data.get('co2', 0),
+                        'temp': data.get('temp', 0),
+                        'hum': data.get('hum', 0),
+                        'light': data.get('current_light', 0),
+                    }
+                    self.update_sensor_display()
+                    self.add_log(f"☁️ 数据来源: 云平台")
+                else:
+                    self.add_log(f"📱 数据来源: APP上传")
+
                 self.add_log(f"✅ 推荐光照: {self.best_light:.0f} lx")
                 self.page.update()
             else:
                 self.add_log(f"❌ 获取推荐失败: {response.text}")
         except Exception as e:
             self.add_log(f"❌ 错误: {str(e)}")
+
+    def fetch_from_cloud(self, e):
+        """从云平台获取实时数据"""
+        self.add_log("☁️ 从云平台获取实时数据...")
+        self.btn_fetch_cloud.disabled = True
+        self.page.update()
+
+        try:
+            # 调用预测接口，不传传感器数据，服务器会从云平台获取
+            response = requests.post(
+                f"{API_BASE_URL}/predict",
+                json={},
+                timeout=10
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                self.sensor_data = {
+                    'co2': data.get('co2', 0),
+                    'temp': data.get('temp', 0),
+                    'hum': data.get('hum', 0),
+                    'light': data.get('current_light', 0),
+                }
+                self.update_sensor_display()
+                self.add_log(f"✅ CO₂={data['co2']:.0f}ppm, 温度={data['temp']:.1f}℃, 光照={data['current_light']:.0f}lx")
+
+                # 更新推荐结果
+                self.best_light = data.get('best_light', 0)
+                self.result_value.value = f"{self.best_light:.0f}"
+                self.result_value.color = ft.Colors.GREEN_700 if self.best_light > 100 else ft.Colors.AMBER_700
+                self.add_log(f"✅ 推荐光照: {self.best_light:.0f} lx")
+                self.page.update()
+            else:
+                self.add_log(f"❌ 获取失败: {response.text}")
+        except requests.exceptions.ConnectionError:
+            self.add_log("❌ 连接失败，请检查API服务器是否运行")
+        except Exception as e:
+            self.add_log(f"❌ 错误: {str(e)}")
+        finally:
+            self.btn_fetch_cloud.disabled = False
+            self.page.update()
 
     def simulate_upload(self, e):
         """模拟上传传感器数据"""
@@ -411,16 +482,9 @@ def main(page: ft.Page):
     app = GreenhouseApp()
     app.main(page)
 
-if __name__ == "__main__":
-    # 打包后以桌面模式运行（不显示浏览器）
-    ft.app(target=main)
 
-# # ========== 启动APP ==========
-# def main(page: ft.Page):
-#     """启动APP - 接收page参数"""
-#     app = GreenhouseApp()
-#     app.main(page)
-#
-# if __name__ == "__main__":
-#     # Web模式：在浏览器中运行（手机也能访问）
-#     ft.app(target=main, view=ft.AppView.WEB_BROWSER)
+if __name__ == "__main__":
+    # 桌面模式
+    ft.app(target=main)
+    # 如果想用Web模式，取消下面这行的注释，并注释掉上面那行
+    # ft.app(target=main, view=ft.AppView.WEB_BROWSER)
