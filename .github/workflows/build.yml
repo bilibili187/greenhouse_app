@@ -25,7 +25,6 @@ jobs:
     
     - name: Build APK
       run: |
-        # --yes 自动确认，--module-name 指定入口文件
         flet build apk . --yes --module-name main
     
     - name: Upload APK
